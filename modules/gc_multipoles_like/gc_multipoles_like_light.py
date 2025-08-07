@@ -20,7 +20,8 @@ def g21f(b1, g2):
     return 2./21*(b1-1)+ 6./7*g2
 
 
-nuisance_params = ['b1', 'b2', 'g2', 'g21', 'c0', 'c2', 'c4', 'cnlo', 'NP0', 'NP20', 'NP22']
+nuisance_params = ['b1', 'b2', 'g2', 'g21', 'c0', 'c2', 'c4', 'cnlo', 'avir', 'NP0', 'NP20', 'NP22']
+wsys_params = ['f_out', 'sigma_z']
 
 def load_cosmology(block):
 	"""
@@ -29,11 +30,12 @@ def load_cosmology(block):
 	cosmo = {}
 
 	try:
-		cosmo["omch2"] = block.get_double(names.cosmological_parameters, "omch2")
-		cosmo["ombh2"] = block.get_double(names.cosmological_parameters, "ombh2")
-		cosmo["n_s"] = block.get_double(names.cosmological_parameters, "n_s")
-		cosmo["h0"] = block.get_double(names.cosmological_parameters, "h0")
-		cosmo["a_s"] = block.get_double(names.cosmological_parameters, "a_s")
+            cosmo["omch2"] = block.get_double(names.cosmological_parameters, "omch2")
+            cosmo["ombh2"] = block.get_double(names.cosmological_parameters, "ombh2")
+            cosmo["n_s"] = block.get_double(names.cosmological_parameters, "n_s")
+            cosmo["h0"] = block.get_double(names.cosmological_parameters, "h0")
+            cosmo["a_s"] = block.get_double(names.cosmological_parameters, "A_s_1e9")
+            cosmo["mnu"] = block.get_double(names.cosmological_parameters, "mnu")
 	except:
 		print("Error reading input cosmology")
 
@@ -95,8 +97,8 @@ def setup(options):
         print()
         
     #COSMOLOGY    
-    params_fid_comet = {par: np.repeat(options.get_double(option_section, par), len(redshift)) for par in ['h', 'wc', 'wb', 'ns', 'As']}
-    params_fid_comet['z'] = redshift
+    #params_fid_comet = {par: np.repeat(options.get_double(option_section, par), len(redshift)) for par in ['h', 'wc', 'wb', 'ns', 'As']}
+    #params_fid_comet['z'] = redshift
     
     de_model = options.get_string(option_section, "de_model")
     print ('Runnung DE model: ', de_model)
@@ -122,12 +124,19 @@ def setup(options):
     emu_model = options.get_string(option_section, "pt_model")
     print ('Runnung PT model: ', emu_model)
     print ()
-    
-    emu = comet(model=emu_model, use_Mpc=False)
-    
-    print ('Setting fiducial cosmology with parameters:', params_fid_comet)
-    emu.define_fiducial_cosmology(params_fid=params_fid_comet)
+
+    try:
+        bias_basis = options.get_string(option_section, "bias_basis")
+    except: bias_basis='EggScoSmi'
+
+    print ('Runnung bias basis: ', bias_basis)
     print ()
+    
+    emu = comet(model=emu_model, use_Mpc=False, bias_basis=bias_basis)
+
+    #print ('Setting fiducial cosmology with parameters:', params_fid_comet)
+    #emu.define_fiducial_cosmology(params_fid=params_fid_comet)
+    #print ()
     
     print ('Setting number density with values:', nbar_arr)
     emu.define_nbar(nbar_arr)
@@ -153,7 +162,17 @@ def setup(options):
         pk4 = data[:,5]
         mps = np.asarray([pk0, pk2, pk4]).T
 
-        emu.define_data_set(data_id[i], zeff=redshift[i], bins=k, signal=mps, cov=cov)
+        if 'nonu' in emu_model: need_params = ['h', 'wc', 'wb', 'ns', 'As']
+        else: need_params = ['h', 'wc', 'wb', 'ns', 'As', 'Mnu']
+
+        params_fid_comet = {par: options.get_double(option_section, par) for par in need_params}
+        params_fid_comet['z'] = redshift[i]
+        
+        print ('Setting fiducial cosmology with parameters:', params_fid_comet)
+
+
+        emu.define_data_set(data_id[i], zeff=redshift[i], bins=k, signal=mps, cov=cov, fiducial_cosmology=params_fid_comet)
+
     return emu, params_fid_comet, redshift, scale_cuts, data_id, g21CoEvol, g2ExSet, AM_priors, de_model, feedback
 
 def execute(block, config):
@@ -169,6 +188,10 @@ def execute(block, config):
     params['ns'] = np.repeat( cosmo["n_s"] ,len(redshift)) 
     params['As'] = np.repeat(cosmo["a_s"],len(redshift))
     
+    print(emu.model)
+    if 'nonu' in emu.model: None
+    else: params['Mnu'] = np.repeat(cosmo["mnu"],len(redshift))
+
     if de_model == "lambda": None
     elif de_model == "w0": 
         params["w0"] =  np.repeat(block.get_double(names.cosmological_parameters, "w"),len(redshift))
@@ -179,10 +202,10 @@ def execute(block, config):
         
     params['z'] = redshift
     
-    print ('Runnung DE model: ', params)
-    print ()
+    #print ('Runnung DE model: ', params)
+    #print ()
     
-    print("Execute mthod running....")
+    #print("Execute mthod running....")
     bias_keys = np.asarray(list(block.keys()))
     bias_spec=bias_keys[:,1][np.where(bias_keys[:,0]=='bias_spec')]
     
@@ -198,7 +221,23 @@ def execute(block, config):
         if bias in ["c0", "c2", "c4"]: params[bias].append(block.get_double("bias_spec", bias_bins)*cosmo["h0"]**2)
         else: params[bias].append(block.get_double("bias_spec", bias_bins))
         
+    try:
+        wsys_keys = np.asarray(list(block.keys()))
+        wsys_spec=wsys_keys[:,1][np.where(wsys_keys[:,0]=='wsys_spec')]
         
+        for wsys in wsys_params:
+            params[wsys] = []
+        
+        for wsys_bins in wsys_spec:
+            wsys = wsys_bins.split("_")[0]+'_'+(wsys_bins.split("_")[1])
+    
+            params[wsys].append(block.get_double("wsys_spec", wsys_bins))
+
+    except:
+        params['f_out'] = np.repeat(0,len(redshift))
+        params['sigma_z'] = np.repeat(0,len(redshift))
+        
+    
     if AM_priors:
         for key in AM_priors.keys():
             params[key] = np.repeat(0,len(redshift))
@@ -207,8 +246,10 @@ def execute(block, config):
             params["g21"] = [g21f(b1, g2) for b1, g2 in zip(params["b1"], params["g2"]) ]
     if g2ExSet: 
             params["g21"] = [g2f(b1) for b1 in params["b1"]]
-    
-    chi2 = emu.chi2(data_id, params, scale_cuts, de_model=de_model, AM_priors=AM_priors)    
+            
+
+    print(params)
+    chi2 = emu.chi2(data_id, params, scale_cuts, de_model=de_model, AM_priors = AM_priors)    
     block["likelihoods", "my_like"] = -0.5*chi2[0]
     
     return 0
