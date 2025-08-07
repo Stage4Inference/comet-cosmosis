@@ -20,7 +20,9 @@ def g21f(b1, g2):
     return 2./21*(b1-1)+ 6./7*g2
 
 
-nuisance_params = ['b1', 'b2', 'g2', 'g21', 'c0', 'c2', 'c4', 'cnlo', 'avir', 'NP0', 'NP20', 'NP22']
+eft_nuisance_params = ['b1', 'b2', 'g2', 'g21', 'c0', 'c2', 'c4', 'cnlo', 'NP0', 'NP20', 'NP22']
+vdf_nuisance_params = ['b1', 'b2', 'g2', 'g21', 'c0', 'c2', 'c4', 'avir', 'NP0', 'NP20', 'NP22']
+
 wsys_params = ['f_out', 'sigma_z']
 
 def load_cosmology(block):
@@ -188,7 +190,7 @@ def execute(block, config):
     params['ns'] = np.repeat( cosmo["n_s"] ,len(redshift)) 
     params['As'] = np.repeat(cosmo["a_s"],len(redshift))
     
-    print(emu.model)
+    #print(emu.model)
     if 'nonu' in emu.model: None
     else: params['Mnu'] = np.repeat(cosmo["mnu"],len(redshift))
 
@@ -207,9 +209,12 @@ def execute(block, config):
     
     #print("Execute mthod running....")
     bias_keys = np.asarray(list(block.keys()))
-    bias_spec=bias_keys[:,1][np.where(bias_keys[:,0]=='bias_spec')]
+    all_bias_spec=bias_keys[:,1][np.where(bias_keys[:,0]=='bias_spec')]
     
-    
+    bias_spec = [par for par in all_bias_spec if 'avir' not in par] if 'EFT' in emu.model else [par for par in all_bias_spec if 'cnlo' not in par]
+
+    nuisance_params = eft_nuisance_params if 'EFT' in emu.model else vdg_nuisance_params
+
     for bias in nuisance_params:
         params[bias] = []
     
