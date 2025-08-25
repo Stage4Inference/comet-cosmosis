@@ -21,27 +21,27 @@ def g21f(b1, g2):
 
 
 eft_nuisance_params = ['b1', 'b2', 'g2', 'g21', 'c0', 'c2', 'c4', 'cnlo', 'NP0', 'NP20', 'NP22']
-vdf_nuisance_params = ['b1', 'b2', 'g2', 'g21', 'c0', 'c2', 'c4', 'avir', 'NP0', 'NP20', 'NP22']
+vdg_nuisance_params = ['b1', 'b2', 'g2', 'g21', 'c0', 'c2', 'c4', 'avir', 'NP0', 'NP20', 'NP22']
 
 wsys_params = ['f_out', 'sigma_z']
 
 def load_cosmology(block):
-	"""
-	Read input cosmology from the datablock
-	"""
-	cosmo = {}
+    """
+    Read input cosmology from the datablock
+    """
+    cosmo = {}
 
-	try:
-            cosmo["omch2"] = block.get_double(names.cosmological_parameters, "omch2")
-            cosmo["ombh2"] = block.get_double(names.cosmological_parameters, "ombh2")
-            cosmo["n_s"] = block.get_double(names.cosmological_parameters, "n_s")
-            cosmo["h0"] = block.get_double(names.cosmological_parameters, "h0")
-            cosmo["a_s"] = block.get_double(names.cosmological_parameters, "A_s_1e9")
-            cosmo["mnu"] = block.get_double(names.cosmological_parameters, "mnu")
-	except:
-		print("Error reading input cosmology")
+    try:
+        cosmo["omch2"] = block.get_double(names.cosmological_parameters, "omch2")
+        cosmo["ombh2"] = block.get_double(names.cosmological_parameters, "ombh2")
+        cosmo["n_s"] = block.get_double(names.cosmological_parameters, "n_s")
+        cosmo["h0"] = block.get_double(names.cosmological_parameters, "h0")
+        cosmo["a_s"] = block.get_double(names.cosmological_parameters, "A_s_1e9")
+        cosmo["mnu"] = block.get_double(names.cosmological_parameters, "mnu")
+    except:
+        print("Error reading input cosmology")
 
-	return cosmo
+    return cosmo
 
 def setup(options):
 
