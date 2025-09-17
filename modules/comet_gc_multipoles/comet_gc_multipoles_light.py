@@ -64,6 +64,12 @@ def setup(options):
     print ('nbar [(h/Mpc)**3] =', nbar_arr)
     print ()
     
+    try:
+        window_files = options.get(option_section, "window_files")
+        kwin_files = options.get(option_section, "kwin_files")
+        kprime_files = options.get(option_section, "kprime_files")
+    except:
+        window_files = None
     
     redshift = json.loads(options.get(option_section, "redshift"))
     print ('redshift =', redshift)
@@ -156,13 +162,15 @@ def setup(options):
         print ('cov_file =', cov_file)
         print ()
 
+        ## Make yourself sure that the data and window have the same dimensions.
         data = np.loadtxt(data_file)
-        cov = np.loadtxt(cov_file)
+        if cov_file == data_file: cov = np.diag(np.concatenate((data[:,2][1:-1]**2, data[:,4][1:-1]**2, data[:,6][1:-1]**2))) #in case of diagonal covariance
+        else: cov = np.loadtxt(cov_file)
 
-        k = data[:,0]
-        pk0 = data[:,1] 
-        pk2 = data[:,3] 
-        pk4 = data[:,5]
+        k = data[:,0][1:-1]
+        pk0 = data[:,1][1:-1] 
+        pk2 = data[:,3][1:-1] 
+        pk4 = data[:,5][1:-1]
         mps = np.asarray([pk0, pk2, pk4]).T
 
         if 'nonu' in emu_model: need_params = ['h', 'wc', 'wb', 'ns', 'As']
@@ -178,12 +186,31 @@ def setup(options):
 
         emu.define_data_set(data_id[i], zeff=redshift[i], bins=k, signal=mps, cov=cov, fiducial_cosmology=params_fid_comet)
 
-    kvec = np.asarray(kvec)
-    return emu, params_fid_comet, redshift, kvec, scale_cuts, data_id, g21CoEvol, g2ExSet, AM_priors, de_model, feedback
+        if window_files:
+            window_file = f'{data_folder}/{window_files.split(" ")[i]}'
+            kwin_file = f'{data_folder}/{kwin_files.split(" ")[i]}'
+            kprime_file = f'{data_folder}/{kprime_files.split(" ")[i]}'
+            print (f'window {i+1}')
+            print ('window_file =', window_file)
+            print ('kwin_file =', kwin_file)
+            print ('kprime_file =', kprime_file)
+            print ()
+                
+            W = np.loadtxt(window_file)
+            kprime = np.loadtxt(kprime_file)
+            kWin = np.loadtxt(kwin_file)
+
+            emu.define_data_set(data_id[i], zeff=redshift[i], bins_mixing_matrix=[k, kprime], W_mixing_matrix=W)
+
+    kvec = np.asarray(kvec[0]) #assuming all k-bins are the same for all redshifts
+    print ('k-bins [h/Mpc] =', kvec.shape)
+    window = True if window_files else False
+
+    return emu, params_fid_comet, redshift, kvec, scale_cuts, data_id, g21CoEvol, g2ExSet, AM_priors, window, de_model, feedback
 
 def execute(block, config):
 
-    emu, params_fid_comet,redshift, kvec, scale_cuts, data_id, g21CoEvol, g2ExSet, AM_priors, de_model, feedback = config
+    emu, params_fid_comet,redshift, kvec, scale_cuts, data_id, g21CoEvol, g2ExSet, AM_priors, window, de_model, feedback = config
 
     cosmo = load_cosmology(block)
     
@@ -255,13 +282,12 @@ def execute(block, config):
             params["g21"] = [g21f(b1, g2) for b1, g2 in zip(params["b1"], params["g2"]) ]
     if g2ExSet: 
             params["g21"] = [g2f(b1) for b1 in params["b1"]]
-            
 
-    print(params)
+    if window:
+        Pell = emu.Pell(kvec, params, ell=[0,2,4], de_model=de_model, obs_id=data_id)
+    else:
+        Pell = emu.Pell(kvec, params, ell=[0,2,4], de_model=de_model)
 
-    Pell = emu.Pell(kvec[0], params, ell=[0,2,4], de_model=de_model)
-
-    
     block["galaxy_P0", "kvec"] = kvec
     block["galaxy_P0", "signal"] = Pell['ell0']
     block["galaxy_P0", "redshift"] = redshift
