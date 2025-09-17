@@ -63,8 +63,14 @@ def setup(options):
     nbar_arr = json.loads(options.get(option_section, "nbar")) #number density of the sample
     print ('nbar [(h/Mpc)**3] =', nbar_arr)
     print ()
-    
-    
+
+    try:
+        window_files = options.get(option_section, "window_files")
+        kwin_files = options.get(option_section, "kwin_files")
+        kprime_files = options.get(option_section, "kprime_files")
+    except:
+        window_files = None
+
     redshift = json.loads(options.get(option_section, "redshift"))
     print ('redshift =', redshift)
     print ()
@@ -155,8 +161,10 @@ def setup(options):
         print ('cov_file =', cov_file)
         print ()
 
+        ## Make yourself sure that the data and window have the same dimensions.
         data = np.loadtxt(data_file)
-        cov = np.loadtxt(cov_file)
+        if cov_file == data_file: cov = np.diag(np.concatenate((data[:,2]**2, data[:,4]**2, data[:,6]**2))) #in case of diagonal covariance
+        else: cov = np.loadtxt(cov_file)
 
         k = data[:,0]
         pk0 = data[:,1] 
@@ -172,15 +180,32 @@ def setup(options):
         
         print ('Setting fiducial cosmology with parameters:', params_fid_comet)
 
+        emu.define_data_set(data_id[i], zeff=redshift[i], bins=k, signal=mps, cov=cov, fiducial_cosmology=params_fid_comet, nbar=nbar_arr[i])
 
-        emu.define_data_set(data_id[i], zeff=redshift[i], bins=k, signal=mps, cov=cov, fiducial_cosmology=params_fid_comet)
+        if window_files:
+            window_file = f'{data_folder}/{window_files.split(" ")[i]}'
+            kwin_file = f'{data_folder}/{kwin_files.split(" ")[i]}'
+            kprime_file = f'{data_folder}/{kprime_files.split(" ")[i]}'
+            print (f'window {i+1}')
+            print ('window_file =', window_file)
+            print ('kwin_file =', kwin_file)
+            print ('kprime_file =', kprime_file)
+            print ()
+                
+            W = np.loadtxt(window_file)
+            kprime = np.loadtxt(kprime_file)
+            kWin = np.loadtxt(kwin_file)
 
-    return emu, params_fid_comet, redshift, scale_cuts, data_id, g21CoEvol, g2ExSet, AM_priors, de_model, feedback
+            emu.define_data_set(data_id[i], bins_mixing_matrix=[k, kprime], W_mixing_matrix=W)
+
+        window = True if window_files else False
+
+    return emu, params_fid_comet, redshift, scale_cuts, data_id, g21CoEvol, g2ExSet, AM_priors, window, de_model, feedback
 
 def execute(block, config):
-    
-    emu, params_fid_comet,redshift, scale_cuts, data_id, g21CoEvol, g2ExSet, AM_priors, de_model, feedback = config
-    
+
+    emu, params_fid_comet,redshift, scale_cuts, data_id, g21CoEvol, g2ExSet, AM_priors, window, de_model, feedback = config
+
     cosmo = load_cosmology(block)
     
     params = {}
@@ -254,7 +279,11 @@ def execute(block, config):
             
 
     print(params)
-    chi2 = emu.chi2(data_id, params, scale_cuts, de_model=de_model, AM_priors = AM_priors)    
-    block["likelihoods", "my_like"] = -0.5*chi2[0]
-    
+    chi2 = emu.chi2(data_id, params, scale_cuts, de_model=de_model, AM_priors = AM_priors, convolve_window=window)
+
+    try:
+        block["likelihoods", "my_like"] = -0.5*chi2[0]
+    except:
+        block["likelihoods", "my_like"] = -0.5*chi2
+
     return 0
