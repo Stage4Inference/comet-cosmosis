@@ -164,13 +164,13 @@ def setup(options):
 
         ## Make yourself sure that the data and window have the same dimensions.
         data = np.loadtxt(data_file)
-        if cov_file == data_file: cov = np.diag(np.concatenate((data[:,2][1:-1]**2, data[:,4][1:-1]**2, data[:,6][1:-1]**2))) #in case of diagonal covariance
+        if cov_file == data_file: cov = np.diag(np.concatenate((data[:,2]**2, data[:,4]**2, data[:,6]**2))) #in case of diagonal covariance
         else: cov = np.loadtxt(cov_file)
 
-        k = data[:,0][1:-1]
-        pk0 = data[:,1][1:-1] 
-        pk2 = data[:,3][1:-1] 
-        pk4 = data[:,5][1:-1]
+        k = data[:,0]
+        pk0 = data[:,1] 
+        pk2 = data[:,3] 
+        pk4 = data[:,5]
         mps = np.asarray([pk0, pk2, pk4]).T
 
         if 'nonu' in emu_model: need_params = ['h', 'wc', 'wb', 'ns', 'As']
@@ -184,7 +184,8 @@ def setup(options):
         print ('Setting fiducial cosmology with parameters:', params_fid_comet)
         kvec.append(k)
 
-        emu.define_data_set(data_id[i], zeff=redshift[i], bins=k, signal=mps, cov=cov, fiducial_cosmology=params_fid_comet)
+        emu.define_data_set(data_id[i], zeff=redshift[i], bins=k, signal=mps, cov=cov, 
+                            fiducial_cosmology=params_fid_comet, nbar=nbar_arr[i])
 
         if window_files:
             window_file = f'{data_folder}/{window_files.split(" ")[i]}'
@@ -288,6 +289,8 @@ def execute(block, config):
     else:
         Pell = emu.Pell(kvec, params, ell=[0,2,4], de_model=de_model)
 
+    P_L = emu.PL(kvec, params, de_model=de_model)
+
     block["galaxy_P0", "kvec"] = kvec
     block["galaxy_P0", "signal"] = Pell['ell0']
     block["galaxy_P0", "redshift"] = redshift
@@ -299,5 +302,11 @@ def execute(block, config):
     block["galaxy_P4", "kvec"] = kvec
     block["galaxy_P4", "signal"] = Pell['ell4']
     block["galaxy_P4", "redshift"] = redshift
-    
+
+    block["galaxy_Pell", "full_signal"] = np.array([kvec, Pell['ell0'], Pell['ell2'], Pell['ell4']]).T
+    block["galaxy_Pell", "redshift"] = redshift
+
+    block["matter_PL", "full_signal"] = np.array([kvec, P_L]).T
+    block["matter_PL", "redshift"] = redshift
+
     return 0
